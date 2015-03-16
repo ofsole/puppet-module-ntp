@@ -7,6 +7,7 @@ class ntp (
   $config_file_group   = 'root',
   $config_file_mode    = '0644',
   $package_latest      = false,
+  $package_manage      = true,
   $package_name        = 'USE_DEFAULTS',
   $package_noop        = 'USE_DEFAULTS',
   $package_source      = 'USE_DEFAULTS',
@@ -45,6 +46,13 @@ class ntp (
     $my_package_latest = str2bool($package_latest)
   } else {
     $my_package_latest = $package_latest
+  }
+
+  # validate type and convert string to boolean if necessary
+  if is_string($package_manage) == true {
+    $package_manage_real = str2bool($package_manage)
+  } else {
+    $package_manage_real = $package_manage
   }
 
   # validate type and convert string to boolean if necessary
@@ -296,7 +304,7 @@ class ntp (
   elsif is_string($restrict_options) == true {
     $restrict_options_real = $restrict_options ? {
       'USE_DEFAULTS' => $default_restrict_options,
-      default        => [ "-4 $restrict_options", "-6 $restrict_options", ]
+      default        => [ "-4 ${restrict_options}", "-6 ${restrict_options}", ]
     }
   }
   else {
@@ -335,61 +343,108 @@ class ntp (
     }
   }
 
-  package { $package_name_real:
-    ensure    => $package_ensure,
-    noop      => $package_noop_real,
-    source    => $package_source_real,
-    adminfile => $package_adminfile_real,
-  }
+  if $package_manage_real == true {
 
-  file { 'ntp_conf':
-    ensure  => file,
-    path    => $config_file_real,
-    owner   => $config_file_owner,
-    group   => $config_file_group,
-    mode    => $config_file_mode,
-    content => template('ntp/ntp.conf.erb'),
-    require => Package[$package_name_real],
-  }
-
-  if $step_tickers_ensure_real == 'present' {
-
-    $step_tickers_dir = dirname($step_tickers_path)
-    validate_absolute_path($step_tickers_dir)
-
-    common::mkdir_p { $step_tickers_dir: }
-
-    file { 'step_tickers_dir':
-      ensure  => directory,
-      path    => $step_tickers_dir,
-      owner   => $step_tickers_owner,
-      group   => $step_tickers_group,
-      mode    => $step_tickers_mode,
-      require => Common::Mkdir_p[$step_tickers_dir],
+    package { $package_name_real:
+      ensure    => $package_ensure,
+      noop      => $package_noop_real,
+      source    => $package_source_real,
+      adminfile => $package_adminfile_real,
     }
 
-    file { 'step-tickers':
-      ensure  => $step_tickers_ensure_real,
-      path    => $step_tickers_path,
-      owner   => $step_tickers_owner,
-      group   => $step_tickers_group,
-      mode    => $step_tickers_mode,
-      content => template('ntp/step-tickers.erb'),
-      require => [ Package[$package_name_real],
-                  File['step_tickers_dir'],
-                  ],
+    file { 'ntp_conf':
+      ensure  => file,
+      path    => $config_file_real,
+      owner   => $config_file_owner,
+      group   => $config_file_group,
+      mode    => $config_file_mode,
+      content => template('ntp/ntp.conf.erb'),
+      require => Package[$package_name_real],
     }
-  }
 
-  service { 'ntp_service':
-    ensure     => $service_ensure,
-    name       => $service_name_real,
-    enable     => $service_enable,
-    hasstatus  => $my_service_hasstatus,
-    hasrestart => $my_service_hasrestart,
-    subscribe  => [ Package[$package_name_real],
+    service { 'ntp_service':
+      ensure     => $service_ensure,
+      name       => $service_name_real,
+      enable     => $service_enable,
+      hasstatus  => $my_service_hasstatus,
+      hasrestart => $my_service_hasrestart,
+      subscribe  => [ Package[$package_name_real],
                     File['ntp_conf'],
-                  ],
+                    ],
+    }
+
+    if $step_tickers_ensure_real == 'present' {
+      $step_tickers_dir = dirname($step_tickers_path)
+      validate_absolute_path($step_tickers_dir)
+
+      common::mkdir_p { $step_tickers_dir: }
+
+      file { 'step_tickers_dir':
+        ensure  => directory,
+        path    => $step_tickers_dir,
+        owner   => $step_tickers_owner,
+        group   => $step_tickers_group,
+        mode    => $step_tickers_mode,
+        require => Common::Mkdir_p[$step_tickers_dir],
+      }
+
+      file { 'step-tickers':
+        ensure  => $step_tickers_ensure_real,
+        path    => $step_tickers_path,
+        owner   => $step_tickers_owner,
+        group   => $step_tickers_group,
+        mode    => $step_tickers_mode,
+        content => template('ntp/step-tickers.erb'),
+        require => [ Package[$package_name_real],
+                    File['step_tickers_dir'],
+                    ],
+      }
+    }
+  } else {
+    file { 'ntp_conf':
+      ensure  => file,
+      path    => $config_file_real,
+      owner   => $config_file_owner,
+      group   => $config_file_group,
+      mode    => $config_file_mode,
+      content => template('ntp/ntp.conf.erb'),
+    }
+
+    service { 'ntp_service':
+      ensure     => $service_ensure,
+      name       => $service_name_real,
+      enable     => $service_enable,
+      hasstatus  => $my_service_hasstatus,
+      hasrestart => $my_service_hasrestart,
+      subscribe  => File['ntp_conf'],
+    }
+
+    if $step_tickers_ensure_real == 'present' {
+
+      $step_tickers_dir = dirname($step_tickers_path)
+      validate_absolute_path($step_tickers_dir)
+
+      common::mkdir_p { $step_tickers_dir: }
+
+      file { 'step_tickers_dir':
+        ensure  => directory,
+        path    => $step_tickers_dir,
+        owner   => $step_tickers_owner,
+        group   => $step_tickers_group,
+        mode    => $step_tickers_mode,
+        require => Common::Mkdir_p[$step_tickers_dir],
+      }
+
+      file { 'step-tickers':
+        ensure  => $step_tickers_ensure_real,
+        path    => $step_tickers_path,
+        owner   => $step_tickers_owner,
+        group   => $step_tickers_group,
+        mode    => $step_tickers_mode,
+        content => template('ntp/step-tickers.erb'),
+        require => File['step_tickers_dir'],
+      }
+    }
   }
 
   if $::virtual == 'xenu' and $::kernel == 'Linux' {
