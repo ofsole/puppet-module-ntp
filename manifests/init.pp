@@ -7,6 +7,7 @@ class ntp (
   $config_file_group   = 'root',
   $config_file_mode    = '0644',
   $package_latest      = false,
+  $package_manage      = true,
   $package_name        = 'USE_DEFAULTS',
   $package_noop        = 'USE_DEFAULTS',
   $package_source      = 'USE_DEFAULTS',
@@ -45,6 +46,13 @@ class ntp (
     $my_package_latest = str2bool($package_latest)
   } else {
     $my_package_latest = $package_latest
+  }
+
+  # validate type and convert string to boolean if necessary
+  if is_string($package_manage) == true {
+    $package_manage_real = str2bool($package_manage)
+  } else {
+    $package_manage_real = $package_manage
   }
 
   # validate type and convert string to boolean if necessary
@@ -296,7 +304,7 @@ class ntp (
   elsif is_string($restrict_options) == true {
     $restrict_options_real = $restrict_options ? {
       'USE_DEFAULTS' => $default_restrict_options,
-      default        => [ "-4 $restrict_options", "-6 $restrict_options", ]
+      default        => [ "-4 ${restrict_options}", "-6 ${restrict_options}", ]
     }
   }
   else {
@@ -335,11 +343,15 @@ class ntp (
     }
   }
 
-  package { $package_name_real:
-    ensure    => $package_ensure,
-    noop      => $package_noop_real,
-    source    => $package_source_real,
-    adminfile => $package_adminfile_real,
+  if $package_manage_real == true {
+    package { $package_name_real:
+      ensure    => $package_ensure,
+      noop      => $package_noop_real,
+      source    => $package_source_real,
+      adminfile => $package_adminfile_real,
+    }
+  } else {
+    package { $package_name_real: }
   }
 
   file { 'ntp_conf':
