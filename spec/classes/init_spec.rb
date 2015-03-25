@@ -262,322 +262,171 @@ describe 'ntp' do
   }
 
   describe 'with default values for parameters on' do
-    context 'with package_manage => true' do
-      let(:params) { { :package_manage => true, } }
-
-      platforms.sort.each do |k,v|
-        context "#{k}" do
-          if v[:osfamily] == 'Solaris'
-            let :facts do
-              { :osfamily        => v[:osfamily],
-                :operatingsystem => v[:operatingsystem],
-                :kernelrelease   => v[:release],
-                :kernel          => v[:kernel],
-                :virtual         => v[:virtual],
-              }
-            end
-          else
-            let :facts do
-              { :osfamily          => v[:osfamily],
-                :operatingsystem   => v[:operatingsystem],
-                :lsbmajdistrelease => v[:release],
-                :kernel            => v[:kernel],
-                :virtual           => v[:virtual],
-              }
-            end
+    platforms.sort.each do |k,v|
+      context "#{k}" do
+        if v[:osfamily] == 'Solaris'
+          let :facts do
+            { :osfamily        => v[:osfamily],
+              :operatingsystem => v[:operatingsystem],
+              :kernelrelease   => v[:release],
+              :kernel          => v[:kernel],
+              :virtual         => v[:virtual],
+            }
           end
+        else
+          let :facts do
+            { :osfamily          => v[:osfamily],
+              :operatingsystem   => v[:operatingsystem],
+              :lsbmajdistrelease => v[:release],
+              :kernel            => v[:kernel],
+              :virtual           => v[:virtual],
+            }
+          end
+        end
 
-          it { should compile.with_all_deps }
+        it { should compile.with_all_deps }
 
-          it { should contain_class('ntp')}
+        it { should contain_class('ntp')}
 
-          if v[:package_name].class == Array
-            package_require = Array.new
+        if v[:package_name].class == Array
+          package_require = Array.new
 
-            v[:package_name].each do |pkg|
-              it {
-                should contain_package(pkg).with({
-                  'ensure'    => 'present',
-                  'noop'      => v[:package_noop],
-                  'source'    => v[:package_source],
-                  'adminfile' => v[:package_adminfile],
-                })
-              }
-              package_require << "Package[#{pkg}]"
-            end
-          else
+          v[:package_name].each do |pkg|
             it {
-              should contain_package(v[:package_name]).with({
-                'ensure'   => 'present',
+              should contain_package(pkg).with({
+                'ensure'    => 'present',
                 'noop'      => v[:package_noop],
                 'source'    => v[:package_source],
                 'adminfile' => v[:package_adminfile],
               })
             }
-
-            package_require = "Package[#{v[:package_name]}]"
+            package_require << "Package[#{pkg}]"
           end
-
+        else
           it {
-            should contain_file('ntp_conf').with({
-              'ensure' => 'file',
-              'path'   => v[:config_file],
-              'owner'  => 'root',
-              'group'  => 'root',
-              'mode'   => '0644',
-              'require' => package_require,
+            should contain_package(v[:package_name]).with({
+              'ensure'   => 'present',
+              'noop'      => v[:package_noop],
+              'source'    => v[:package_source],
+              'adminfile' => v[:package_adminfile],
             })
           }
 
-          if v[:driftfile] != ''
-            it { should contain_file('ntp_conf').with_content(/driftfile #{Regexp.escape(v[:driftfile])}/) }
-          else
-            it { should contain_file('ntp_conf').without_content(/driftfile/) }
-          end
-          if v[:enable_tinker]
-            it { should contain_file('ntp_conf').with_content(/^tinker panic 0$/) }
-          else
-            it { should contain_file('ntp_conf').without_content(/^tinker panic 0$/) }
-          end
-          it { should contain_file('ntp_conf').with_content(/# Statistics are not being logged$/) }
-          it { should contain_file('ntp_conf').with_content(/server 0.us.pool.ntp.org\nserver 1.us.pool.ntp.org\nserver 2.us.pool.ntp.org/) }
-          it { should contain_file('ntp_conf').without_content(/^\s*peer/) }
-          if v[:keys] != ''
-            it { should contain_file('ntp_conf').with_content(/^keys #{Regexp.escape(v[:keys])}$/) }
-          else
-            it { should contain_file('ntp_conf').without_content(/^\s*keys /) }
-          end
-          it { should contain_file('ntp_conf').with_content(/fudge  127.127.1.0 stratum 10$/) }
-          v[:restrict_options].each do |restrict_options|
-            it { should contain_file('ntp_conf').with_content(/^restrict #{restrict_options}$/) }
-          end
-          v[:restrict_localhost].each do |restrict_localhost|
-            it { should contain_file('ntp_conf').with_content(/^restrict #{restrict_localhost}$/) }
-          end
-
-          if v[:step_tickers_ensure] == 'present'
-
-            it {
-              should contain_exec('mkdir_p-/etc/ntp').with({
-                'command' => 'mkdir -p /etc/ntp',
-                'unless'  => 'test -d /etc/ntp',
-              })
-            }
-
-            it {
-              should contain_file('step_tickers_dir').with({
-                'ensure' => 'directory',
-                'path'   => '/etc/ntp',
-                'owner'  => 'root',
-                'group'  => 'root',
-                'mode'   => '0644',
-                'require' => 'Common::Mkdir_p[/etc/ntp]',
-              })
-            }
-
-            it {
-              should contain_file('step-tickers').with({
-                'ensure' => 'present',
-                'path'   => '/etc/ntp/step-tickers',
-                'owner'  => 'root',
-                'group'  => 'root',
-                'mode'   => '0644',
-                'require' => ['Package[ntp]', 'File[step_tickers_dir]'],
-              })
-            }
-
-            it { should contain_file('step-tickers').with_content(/server 0.us.pool.ntp.org\nserver 1.us.pool.ntp.org\nserver 2.us.pool.ntp.org/) }
-
-          elsif v[:step_tickers_ensure] == 'absent'
-
-            it { should_not contain_exec('mkdir_p-/etc/ntp') }
-
-            it { should_not contain_file('step_tickers_dir') }
-
-            it { should_not contain_file('step-tickers') }
-          end
-
-          if v[:package_adminfile]
-            it {
-              should contain_file('admin_file').with({
-                'ensure' => 'present',
-                'path'   => v[:package_adminfile],
-                'owner'  => 'root',
-                'group'  => 'root',
-                'mode'   => '0644',
-              })
-            }
-          else
-            it { should_not contain_file('admin_file') }
-          end
-
-          it {
-            should contain_service('ntp_service').with({
-              'ensure' => 'running',
-              'name'   => v[:service_name],
-              'enable' => 'true',
-            })
-          }
-
-          if v[:virtual] == 'xenu' and v[:kernel] == 'Linux'
-            it {
-              should contain_exec('xen_independent_wallclock').with({
-                'path'    => '/bin:/usr/bin',
-                'command' => 'echo 1 > /proc/sys/xen/independent_wallclock',
-                'unless'  => 'grep ^1 /proc/sys/xen/independent_wallclock',
-                'onlyif'  => 'test -f /proc/sys/xen/independent_wallclock',
-              })
-            }
-          else
-            it { should_not contain_exec('xen_independent_wallclock') }
-          end
+          package_require = "Package[#{v[:package_name]}]"
         end
-      end
-    end
 
-    context 'with package_manage => false' do
-      let(:params) { { :package_manage => false, } }
+        it {
+          should contain_file('ntp_conf').with({
+            'ensure' => 'file',
+            'path'   => v[:config_file],
+            'owner'  => 'root',
+            'group'  => 'root',
+            'mode'   => '0644',
+            'require' => package_require,
+          })
+        }
 
-      platforms.sort.each do |k,v|
-        context "#{k}" do
-          if v[:osfamily] == 'Solaris'
-            let :facts do
-              { :osfamily        => v[:osfamily],
-                :operatingsystem => v[:operatingsystem],
-                :kernelrelease   => v[:release],
-                :kernel          => v[:kernel],
-                :virtual         => v[:virtual],
-              }
-            end
-          else
-            let :facts do
-              { :osfamily          => v[:osfamily],
-                :operatingsystem   => v[:operatingsystem],
-                :lsbmajdistrelease => v[:release],
-                :kernel            => v[:kernel],
-                :virtual           => v[:virtual],
-              }
-            end
-          end
+        if v[:driftfile] != ''
+          it { should contain_file('ntp_conf').with_content(/driftfile #{Regexp.escape(v[:driftfile])}/) }
+        else
+          it { should contain_file('ntp_conf').without_content(/driftfile/) }
+        end
+        if v[:enable_tinker]
+          it { should contain_file('ntp_conf').with_content(/^tinker panic 0$/) }
+        else
+          it { should contain_file('ntp_conf').without_content(/^tinker panic 0$/) }
+        end
+        it { should contain_file('ntp_conf').with_content(/# Statistics are not being logged$/) }
+        it { should contain_file('ntp_conf').with_content(/server 0.us.pool.ntp.org\nserver 1.us.pool.ntp.org\nserver 2.us.pool.ntp.org/) }
+        it { should contain_file('ntp_conf').without_content(/^\s*peer/) }
+        if v[:keys] != ''
+          it { should contain_file('ntp_conf').with_content(/^keys #{Regexp.escape(v[:keys])}$/) }
+        else
+          it { should contain_file('ntp_conf').without_content(/^\s*keys /) }
+        end
+        it { should contain_file('ntp_conf').with_content(/fudge  127.127.1.0 stratum 10$/) }
+        v[:restrict_options].each do |restrict_options|
+          it { should contain_file('ntp_conf').with_content(/^restrict #{restrict_options}$/) }
+        end
+        v[:restrict_localhost].each do |restrict_localhost|
+          it { should contain_file('ntp_conf').with_content(/^restrict #{restrict_localhost}$/) }
+        end
 
-          it { should compile.with_all_deps }
-
-          it { should contain_class('ntp') }
-
-          it { should_not contain_package(v[:package_name]) }
+        if v[:step_tickers_ensure] == 'present'
 
           it {
-            should contain_file('ntp_conf').with({
-              'ensure' => 'file',
-              'path'   => v[:config_file],
+            should contain_exec('mkdir_p-/etc/ntp').with({
+              'command' => 'mkdir -p /etc/ntp',
+              'unless'  => 'test -d /etc/ntp',
+            })
+          }
+
+          it {
+            should contain_file('step_tickers_dir').with({
+              'ensure' => 'directory',
+              'path'   => '/etc/ntp',
+              'owner'  => 'root',
+              'group'  => 'root',
+              'mode'   => '0644',
+              'require' => 'Common::Mkdir_p[/etc/ntp]',
+            })
+          }
+
+          it {
+            should contain_file('step-tickers').with({
+              'ensure' => 'present',
+              'path'   => '/etc/ntp/step-tickers',
+              'owner'  => 'root',
+              'group'  => 'root',
+              'mode'   => '0644',
+              'require' => ['Package[ntp]', 'File[step_tickers_dir]'],
+            })
+          }
+
+          it { should contain_file('step-tickers').with_content(/server 0.us.pool.ntp.org\nserver 1.us.pool.ntp.org\nserver 2.us.pool.ntp.org/) }
+
+        elsif v[:step_tickers_ensure] == 'absent'
+
+          it { should_not contain_exec('mkdir_p-/etc/ntp') }
+
+          it { should_not contain_file('step_tickers_dir') }
+
+          it { should_not contain_file('step-tickers') }
+        end
+
+        if v[:package_adminfile]
+          it {
+            should contain_file('admin_file').with({
+              'ensure' => 'present',
+              'path'   => v[:package_adminfile],
               'owner'  => 'root',
               'group'  => 'root',
               'mode'   => '0644',
             })
           }
+        else
+          it { should_not contain_file('admin_file') }
+        end
 
-          if v[:driftfile] != ''
-            it { should contain_file('ntp_conf').with_content(/driftfile #{Regexp.escape(v[:driftfile])}/) }
-          else
-            it { should contain_file('ntp_conf').without_content(/driftfile/) }
-          end
-          if v[:enable_tinker]
-            it { should contain_file('ntp_conf').with_content(/^tinker panic 0$/) }
-          else
-            it { should contain_file('ntp_conf').without_content(/^tinker panic 0$/) }
-          end
-          it { should contain_file('ntp_conf').with_content(/# Statistics are not being logged$/) }
-          it { should contain_file('ntp_conf').with_content(/server 0.us.pool.ntp.org\nserver 1.us.pool.ntp.org\nserver 2.us.pool.ntp.org/) }
-          it { should contain_file('ntp_conf').without_content(/^\s*peer/) }
-          if v[:keys] != ''
-            it { should contain_file('ntp_conf').with_content(/^keys #{Regexp.escape(v[:keys])}$/) }
-          else
-            it { should contain_file('ntp_conf').without_content(/^\s*keys /) }
-          end
-          it { should contain_file('ntp_conf').with_content(/fudge  127.127.1.0 stratum 10$/) }
-          v[:restrict_options].each do |restrict_options|
-            it { should contain_file('ntp_conf').with_content(/^restrict #{restrict_options}$/) }
-          end
-          v[:restrict_localhost].each do |restrict_localhost|
-            it { should contain_file('ntp_conf').with_content(/^restrict #{restrict_localhost}$/) }
-          end
+        it {
+          should contain_service('ntp_service').with({
+            'ensure' => 'running',
+            'name'   => v[:service_name],
+            'enable' => 'true',
+          })
+        }
 
-          if v[:step_tickers_ensure] == 'present'
-
-            it {
-              should contain_exec('mkdir_p-/etc/ntp').with({
-                'command' => 'mkdir -p /etc/ntp',
-                'unless'  => 'test -d /etc/ntp',
-              })
-            }
-
-            it {
-              should contain_file('step_tickers_dir').with({
-                'ensure' => 'directory',
-                'path'   => '/etc/ntp',
-                'owner'  => 'root',
-                'group'  => 'root',
-                'mode'   => '0644',
-                'require' => 'Common::Mkdir_p[/etc/ntp]',
-              })
-            }
-
-            it {
-              should contain_file('step-tickers').with({
-                'ensure' => 'present',
-                'path'   => '/etc/ntp/step-tickers',
-                'owner'  => 'root',
-                'group'  => 'root',
-                'mode'   => '0644',
-                'require' => ['File[step_tickers_dir]'],
-              })
-            }
-
-            it { should contain_file('step-tickers').with_content(/server 0.us.pool.ntp.org\nserver 1.us.pool.ntp.org\nserver 2.us.pool.ntp.org/) }
-
-          elsif v[:step_tickers_ensure] == 'absent'
-
-            it { should_not contain_exec('mkdir_p-/etc/ntp') }
-
-            it { should_not contain_file('step_tickers_dir') }
-
-            it { should_not contain_file('step-tickers') }
-          end
-
-          if v[:package_adminfile]
-            it {
-              should contain_file('admin_file').with({
-                'ensure' => 'present',
-                'path'   => v[:package_adminfile],
-                'owner'  => 'root',
-                'group'  => 'root',
-                'mode'   => '0644',
-              })
-            }
-          else
-            it { should_not contain_file('admin_file') }
-          end
-
+        if v[:virtual] == 'xenu' and v[:kernel] == 'Linux'
           it {
-            should contain_service('ntp_service').with({
-              'ensure' => 'running',
-              'name'   => v[:service_name],
-              'enable' => 'true',
+            should contain_exec('xen_independent_wallclock').with({
+              'path'    => '/bin:/usr/bin',
+              'command' => 'echo 1 > /proc/sys/xen/independent_wallclock',
+              'unless'  => 'grep ^1 /proc/sys/xen/independent_wallclock',
+              'onlyif'  => 'test -f /proc/sys/xen/independent_wallclock',
             })
           }
-
-          if v[:virtual] == 'xenu' and v[:kernel] == 'Linux'
-            it {
-              should contain_exec('xen_independent_wallclock').with({
-                'path'    => '/bin:/usr/bin',
-                'command' => 'echo 1 > /proc/sys/xen/independent_wallclock',
-                'unless'  => 'grep ^1 /proc/sys/xen/independent_wallclock',
-                'onlyif'  => 'test -f /proc/sys/xen/independent_wallclock',
-              })
-            }
-          else
-            it { should_not contain_exec('xen_independent_wallclock') }
-          end
+        else
+          it { should_not contain_exec('xen_independent_wallclock') }
         end
       end
     end
@@ -821,7 +670,7 @@ describe 'ntp' do
     let :facts do
       { :osfamily => 'RedHat',
         :virtual  => 'physical',
-              :kernel   => 'Linux'
+	      :kernel   => 'Linux'
       }
     end
 
@@ -853,8 +702,6 @@ describe 'ntp' do
 
   describe 'with package_name set' do
     let(:facts) { { :osfamily => 'RedHat' } }
-
-    let(:params) { { :package_manage => true} }
 
     context 'to an array' do
       let(:params) { { :package_name => ['ntp','ntphelper'] } }
@@ -1016,39 +863,70 @@ describe 'ntp' do
     end
   end
 
-  describe 'with package_manage set to' do
+  describe 'with package_manage set' do
     let(:facts) { { :osfamily => 'RedHat' } }
-
     [true,'true',false,'false'].each do |value|
-      context "valid #{value} as #{value.class}" do
+      context "to valid #{value} (as #{value.class})" do
         let(:params) { { :package_manage => value } }
-
-        it { should compile.with_all_deps }
-        it { should contain_class('ntp') }
 
         if value == true or value == 'true'
           it {
             should contain_package('ntp').with({
-              'ensure' => 'present',
+              'ensure'    => 'present',
+              'noop'      => 'false',
+              'source'    => nil,
+              'adminfile' => nil,
+            })
+          }
+          it {
+            should contain_file('ntp_conf').with({
+              'require' => [ 'Package[ntp]', ],
+            })
+          }
+          it {
+            should contain_file('step-tickers').with({
+              'require' => [ 'Package[ntp]', 'File[step_tickers_dir]', ],
+            })
+          }
+          it {
+            should contain_service('ntp_service').with({
+              'subscribe' => [ 'Package[ntp]', 'File[ntp_conf]', ],
             })
           }
         else
           it { should_not contain_package('ntp') }
+          it {
+            should contain_file('ntp_conf').with({
+              'require' => nil,
+            })
+          }
+          it {
+            should contain_file('step-tickers').with({
+              'require' => [ 'File[step_tickers_dir]', ],
+            })
+          }
+          it {
+            should contain_service('ntp_service').with({
+              'subscribe' => [ 'File[ntp_conf]', ],
+            })
+          }
         end
+
       end
     end
 
     ['invalid',3,2.42,['array'],a = { 'ha' => 'sh' }].each do |value|
-      context "invalid #{value} as #{value.class}" do
+      context "to invalid #{value} (as #{value.class})" do
         let(:params) { { :package_manage => value } }
 
         it do
           expect {
             should contain_class('ntp')
-          }.to raise_error(Puppet::Error,/str2bool/)
+          }.to raise_error(Puppet::Error,/str2bool\(\):/)
         end
+
       end
     end
-  end
 
+  end
 end
