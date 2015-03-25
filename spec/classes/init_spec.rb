@@ -863,4 +863,70 @@ describe 'ntp' do
     end
   end
 
+  describe 'with package_manage set' do
+    let(:facts) { { :osfamily => 'RedHat' } }
+    [true,'true',false,'false'].each do |value|
+      context "to valid #{value} (as #{value.class})" do
+        let(:params) { { :package_manage => value } }
+
+        if value == true or value == 'true'
+          it {
+            should contain_package('ntp').with({
+              'ensure'    => 'present',
+              'noop'      => 'false',
+              'source'    => nil,
+              'adminfile' => nil,
+            })
+          }
+          it {
+            should contain_file('ntp_conf').with({
+              'require' => [ 'Package[ntp]', ],
+            })
+          }
+          it {
+            should contain_file('step-tickers').with({
+              'require' => [ 'Package[ntp]', 'File[step_tickers_dir]', ],
+            })
+          }
+          it {
+            should contain_service('ntp_service').with({
+              'subscribe' => [ 'Package[ntp]', 'File[ntp_conf]', ],
+            })
+          }
+        else
+          it { should_not contain_package('ntp') }
+          it {
+            should contain_file('ntp_conf').with({
+              'require' => nil,
+            })
+          }
+          it {
+            should contain_file('step-tickers').with({
+              'require' => [ 'File[step_tickers_dir]', ],
+            })
+          }
+          it {
+            should contain_service('ntp_service').with({
+              'subscribe' => [ 'File[ntp_conf]', ],
+            })
+          }
+        end
+
+      end
+    end
+
+    ['invalid',3,2.42,['array'],a = { 'ha' => 'sh' }].each do |value|
+      context "to invalid #{value} (as #{value.class})" do
+        let(:params) { { :package_manage => value } }
+
+        it do
+          expect {
+            should contain_class('ntp')
+          }.to raise_error(Puppet::Error,/str2bool\(\):/)
+        end
+
+      end
+    end
+
+  end
 end

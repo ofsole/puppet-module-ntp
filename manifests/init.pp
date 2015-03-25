@@ -7,6 +7,7 @@ class ntp (
   $config_file_group   = 'root',
   $config_file_mode    = '0644',
   $package_latest      = false,
+  $package_manage      = true,
   $package_name        = 'USE_DEFAULTS',
   $package_noop        = 'USE_DEFAULTS',
   $package_source      = 'USE_DEFAULTS',
@@ -45,6 +46,12 @@ class ntp (
     $my_package_latest = str2bool($package_latest)
   } else {
     $my_package_latest = $package_latest
+  }
+
+  if is_bool($package_manage) == true {
+    $package_manage_real = $package_manage
+  } else {
+    $package_manage_real = str2bool($package_manage)
   }
 
   # validate type and convert string to boolean if necessary
@@ -335,11 +342,20 @@ class ntp (
     }
   }
 
-  package { $package_name_real:
-    ensure    => $package_ensure,
-    noop      => $package_noop_real,
-    source    => $package_source_real,
-    adminfile => $package_adminfile_real,
+  if $package_manage_real == true {
+    package { $package_name_real:
+      ensure    => $package_ensure,
+      noop      => $package_noop_real,
+      source    => $package_source_real,
+      adminfile => $package_adminfile_real,
+    }
+    $ntp_conf_require      = [ Package[$package_name_real] ]
+    $step_tickers_require  = [ Package[$package_name_real], File['step_tickers_dir'] ]
+    $ntp_service_subscribe = [ Package[$package_name_real], File['ntp_conf'] ]
+  } else {
+    $ntp_conf_require     = undef
+    $step_tickers_require = [ File['step_tickers_dir'] ]
+    $ntp_service_subscribe  = [ File['ntp_conf'] ]
   }
 
   file { 'ntp_conf':
@@ -349,7 +365,7 @@ class ntp (
     group   => $config_file_group,
     mode    => $config_file_mode,
     content => template('ntp/ntp.conf.erb'),
-    require => Package[$package_name_real],
+    require => $ntp_conf_require,
   }
 
   if $step_tickers_ensure_real == 'present' {
@@ -375,9 +391,7 @@ class ntp (
       group   => $step_tickers_group,
       mode    => $step_tickers_mode,
       content => template('ntp/step-tickers.erb'),
-      require => [ Package[$package_name_real],
-                  File['step_tickers_dir'],
-                  ],
+      require => $step_tickers_require,
     }
   }
 
@@ -387,9 +401,7 @@ class ntp (
     enable     => $service_enable,
     hasstatus  => $my_service_hasstatus,
     hasrestart => $my_service_hasrestart,
-    subscribe  => [ Package[$package_name_real],
-                    File['ntp_conf'],
-                  ],
+    subscribe  => $ntp_service_subscribe,
   }
 
   if $::virtual == 'xenu' and $::kernel == 'Linux' {
